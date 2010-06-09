@@ -77,19 +77,19 @@ module Delayed
         result = nil
 
         realtime = Benchmark.realtime do
-          result = work_off
+          result = work_off(3)
         end
-
+        
         count = result.sum
 
         break if $exit
-
-        if count.zero?
-          sleep(@@sleep_delay)
-        else
-          say "#{count} jobs processed at %.4f j/s, %d failed ..." % [count / realtime, result.last]
+        
+        if realtime < 1
+          sleep(1 - realtime)
         end
 
+        say "#{count} jobs processed at %.4f seconds, %d failed ... Time: #{Time.now.utc}" % [realtime, result.last]        
+        
         break if $exit
       end
 
@@ -122,7 +122,7 @@ module Delayed
         Timeout.timeout(self.class.max_run_time.to_i) { job.invoke_job }
         job.destroy
       end
-      say "#{job.name} completed after %.4f" % runtime
+      # say "#{job.name} completed after %.4f" % runtime
       return true  # did work
     rescue Exception => e
       handle_failed_job(job, e)
@@ -169,9 +169,9 @@ module Delayed
 
       # We get up to 5 jobs from the db. In case we cannot get exclusive access to a job we try the next.
       # this leads to a more even distribution of jobs across the worker processes
-      job = Delayed::Job.find_available(name, 5, self.class.max_run_time).detect do |job|
+      job = Delayed::Job.find_available(name, 3, self.class.max_run_time).detect do |job|
         if job.lock_exclusively!(self.class.max_run_time, name)
-          say "acquired lock on #{job.name}"
+          #say "acquired lock on #{job.name}"
           true
         else
           say "failed to acquire exclusive lock for #{job.name}", Logger::WARN
@@ -179,7 +179,7 @@ module Delayed
         end
       end
 
-      #run(job) if job
+      run(job) if job
     end
   end
 end

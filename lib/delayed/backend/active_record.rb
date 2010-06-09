@@ -25,10 +25,12 @@ module Delayed
         
         before_save :set_default_run_at
 
-        named_scope :ready_to_run, lambda {|worker_name, max_run_time|
-          {:conditions => ['(run_at <= ? AND (locked_at IS NULL OR locked_at < ?) OR locked_by = ?) AND failed_at IS NULL', db_time_now, db_time_now - max_run_time, worker_name]}
+        named_scope :ready_to_run, lambda {|worker_name, max_run_time, limit|
+          { :conditions => ['(run_at <= ? AND (locked_at IS NULL OR locked_at < ?) OR locked_by = ?) AND failed_at IS NULL', db_time_now, db_time_now - max_run_time, worker_name],
+            :order => 'priority ASC, run_at ASC',
+            :limit => limit}
         }
-        named_scope :by_priority, :order => 'priority ASC, run_at ASC'
+        #named_scope :by_priority, :order => 'priority ASC, run_at ASC'
         
         def self.after_fork
           ::ActiveRecord::Base.connection.reconnect!
@@ -41,13 +43,11 @@ module Delayed
 
         # Find a few candidate jobs to run (in case some immediately get locked by others).
         def self.find_available(worker_name, limit = 5, max_run_time = Worker.max_run_time)
-          scope = self.ready_to_run(worker_name, max_run_time)
+          scope = self.ready_to_run(worker_name, max_run_time, limit)
           scope = scope.scoped(:conditions => ['priority >= ?', Worker.min_priority]) if Worker.min_priority
           scope = scope.scoped(:conditions => ['priority <= ?', Worker.max_priority]) if Worker.max_priority
-      
-          ::ActiveRecord::Base.silence do
-            scope.by_priority.all(:limit => limit)
-          end
+                  
+          scope
         end
 
         # Lock this job for this worker.
