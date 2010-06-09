@@ -179,7 +179,7 @@ module Delayed
         end
       end
 
-      run(job) if job
+      #run(job) if job
     end
   end
 end
