@@ -9,6 +9,8 @@ module Delayed
     self.sleep_delay = 5
     self.max_attempts = 25
     self.max_run_time = 4.hours
+    WORK_OFF_PER_CYCLE = 1
+    CYCLE = 1
     
     # By default failed jobs are destroyed after too many attempts. If you want to keep them around
     # (perhaps to inspect the reason for the failure), set this to false.
@@ -73,19 +75,21 @@ module Delayed
       trap('TERM') { say 'Exiting...'; $exit = true }
       trap('INT')  { say 'Exiting...'; $exit = true }
 
+      puts "Pulling " + WORK_OFF_PER_CYCLE.to_s + " job per " + CYCLE.to_s + " seconds."
+
       loop do
         result = nil
 
         realtime = Benchmark.realtime do
-          result = work_off(3)
+          result = work_off(WORK_OFF_PER_CYCLE)
         end
         
         count = result.sum
 
         break if $exit
         
-        if realtime < 1
-          sleep(1 - realtime)
+        if realtime < CYCLE
+          sleep(CYCLE - realtime)
         end
 
         say "#{count} jobs processed at %.4f seconds, %d failed ... Time: #{Time.now.utc}" % [realtime, result.last]        
@@ -99,7 +103,7 @@ module Delayed
     
     # Do num jobs and return stats on success/failure.
     # Exit early if interrupted.
-    def work_off(num = 100)
+    def work_off(num)
       success, failure = 0, 0
 
       num.times do
@@ -169,7 +173,7 @@ module Delayed
 
       # We get up to 5 jobs from the db. In case we cannot get exclusive access to a job we try the next.
       # this leads to a more even distribution of jobs across the worker processes
-      job = Delayed::Job.find_available(name, 3, self.class.max_run_time).detect do |job|
+      job = Delayed::Job.find_available(name, WORK_OFF_PER_CYCLE, self.class.max_run_time).detect do |job|
         if job.lock_exclusively!(self.class.max_run_time, name)
           #say "acquired lock on #{job.name}"
           true
